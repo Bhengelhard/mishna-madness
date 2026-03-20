@@ -523,16 +523,16 @@ function ParticipantsTab({
                         }
                       />
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => openEdit(p)}>
+                        <DropdownMenuItem onClick={() => openEdit(p)}>
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => handleToggleEliminated(p)}>
+                        <DropdownMenuItem onClick={() => handleToggleEliminated(p)}>
                           {p.eliminated ? 'Mark Active' : 'Mark Eliminated'}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           variant="destructive"
-                          onSelect={() => setDeleteTarget(p)}
+                          onClick={() => setDeleteTarget(p)}
                         >
                           Delete
                         </DropdownMenuItem>

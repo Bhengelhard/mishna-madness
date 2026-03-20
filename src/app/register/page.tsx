@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { registerParticipant } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ type RegistrationState =
   | { status: 'error'; message: string };
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [state, setState] = useState<RegistrationState>({ status: 'idle' });
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -26,8 +28,13 @@ export default function RegisterPage() {
 
     try {
       const result = await registerParticipant(formData);
-      if (result.success) {
+      if (result.success && result.participant) {
+        // Auto-login: store participant info and redirect to dashboard
+        localStorage.setItem('participantId', result.participant.id);
+        localStorage.setItem('participantName', result.participant.name);
+        localStorage.setItem('participantEmail', result.participant.email);
         setState({ status: 'success', name });
+        router.push('/dashboard');
       } else {
         setState({ status: 'error', message: result.error ?? 'Something went wrong. Please try again.' });
       }

@@ -77,15 +77,15 @@ export async function registerParticipant(formData: FormData): Promise<{
     return { success: false, error: 'The registration deadline has passed.' };
   }
 
-  // Check for duplicate email
+  // Check for duplicate email — if already registered, return the existing participant
   const { data: existing } = await supabase
     .from('participants')
-    .select('id')
+    .select('id, name, email, phone, seed, eliminated, created_at')
     .eq('email', email)
     .single();
 
   if (existing) {
-    return { success: false, error: 'A participant with this email is already registered.' };
+    return { success: true, participant: existing };
   }
 
   const { data: participant, error } = await supabase
