@@ -1194,14 +1194,12 @@ export default function AdminPage() {
   const [bracketData, setBracketData] = useState<BracketData>(null);
   const [loading, setLoading] = useState(true);
 
-  // Auth check: look for admin_auth cookie via a server action, or fall back to localStorage
+  // Auth check: require admin_auth in localStorage (set by /admin/login)
   useEffect(() => {
-    // We rely on the server cookie set by adminLogin. If the user arrives without it,
-    // the page will try to load data. If getAllParticipants fails (unauthorized), redirect.
-    // For simplicity, also check localStorage as a client-side hint.
     const lsAuth = typeof window !== 'undefined' ? localStorage.getItem('admin_auth') : null;
     if (!lsAuth) {
-      // Still try; cookie might be present
+      router.push('/admin/login');
+      return;
     }
     loadData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
