@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getParticipantByEmail } from '@/lib/actions';
+import { getUserByEmail } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -26,19 +26,19 @@ export default function LoginPage() {
     const email = (formData.get('email') as string).trim().toLowerCase();
 
     try {
-      const participant = await getParticipantByEmail(email);
+      const user = await getUserByEmail(email);
 
-      if (!participant) {
+      if (!user) {
         setState({
           status: 'error',
-          message: 'No account found with that email. Please check your address or register first.',
+          message: 'No account found with that email. Please check your address or create an account first.',
         });
         return;
       }
 
-      localStorage.setItem('participantId', participant.id);
-      localStorage.setItem('participantName', participant.name);
-      localStorage.setItem('participantEmail', participant.email);
+      localStorage.setItem('userId', user.id);
+      localStorage.setItem('userName', user.name);
+      localStorage.setItem('userEmail', user.email);
 
       router.push('/dashboard');
     } catch {
@@ -56,7 +56,6 @@ export default function LoginPage() {
             &larr; Back to Home
           </Link>
           <div className="mt-2 space-y-1">
-            <span className="text-4xl block">👋</span>
             <h1 className="text-3xl font-bold tracking-tight text-primary">Welcome Back</h1>
             <p className="text-muted-foreground text-sm">
               Enter your email to access your dashboard.
@@ -110,9 +109,9 @@ export default function LoginPage() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          Not registered yet?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/register" className="text-primary font-medium underline underline-offset-2 hover:text-primary/80">
-            Sign up here
+            Create one here
           </Link>
         </p>
       </div>

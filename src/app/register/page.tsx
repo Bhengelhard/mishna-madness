@@ -3,37 +3,33 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { registerParticipant } from '@/lib/actions';
+import { createUser } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-type RegistrationState =
+type FormState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'success'; name: string }
   | { status: 'error'; message: string };
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [state, setState] = useState<RegistrationState>({ status: 'idle' });
+  const [state, setState] = useState<FormState>({ status: 'idle' });
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setState({ status: 'loading' });
 
     const formData = new FormData(e.currentTarget);
-    const name = (formData.get('name') as string).trim();
 
     try {
-      const result = await registerParticipant(formData);
-      if (result.success && result.participant) {
-        // Auto-login: store participant info and redirect to dashboard
-        localStorage.setItem('participantId', result.participant.id);
-        localStorage.setItem('participantName', result.participant.name);
-        localStorage.setItem('participantEmail', result.participant.email);
-        setState({ status: 'success', name });
+      const result = await createUser(formData);
+      if (result.success && result.user) {
+        localStorage.setItem('userId', result.user.id);
+        localStorage.setItem('userName', result.user.name);
+        localStorage.setItem('userEmail', result.user.email);
         router.push('/dashboard');
       } else {
         setState({ status: 'error', message: result.error ?? 'Something went wrong. Please try again.' });
@@ -41,32 +37,6 @@ export default function RegisterPage() {
     } catch {
       setState({ status: 'error', message: 'Something went wrong. Please try again.' });
     }
-  }
-
-  if (state.status === 'success') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
-        <Card className="w-full max-w-md shadow-md border-primary/20">
-          <CardContent className="py-10 flex flex-col items-center gap-4 text-center">
-            <span className="text-5xl">🎉</span>
-            <h2 className="text-2xl font-bold text-foreground">You are in!</h2>
-            <p className="text-muted-foreground text-sm leading-relaxed max-w-xs">
-              Welcome to Mishna Madness, <span className="font-semibold text-foreground">{state.name}</span>!
-              You will receive an email with matchup details and your assigned Masechta once the tournament begins.
-              Keep an eye on your inbox and get ready to learn.
-            </p>
-            <div className="flex flex-col gap-2 w-full pt-2">
-              <Button render={<Link href="/login" />} size="lg" className="w-full min-h-[44px]">
-                Go to My Dashboard
-              </Button>
-              <Button render={<Link href="/" />} variant="outline" size="lg" className="w-full min-h-[44px]">
-                Back to Home
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
   return (
@@ -78,9 +48,9 @@ export default function RegisterPage() {
           <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             &larr; Back to Home
           </Link>
-          <h1 className="text-3xl font-bold tracking-tight text-primary mt-2">Register</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-primary mt-2">Create Account</h1>
           <p className="text-muted-foreground text-sm">
-            Join the Mishna Madness tournament. Spots are limited.
+            Sign up to join Mishna Madness tournaments.
           </p>
         </div>
 
@@ -156,14 +126,14 @@ export default function RegisterPage() {
                 className="w-full min-h-[48px] text-base font-semibold mt-1"
                 disabled={state.status === 'loading'}
               >
-                {state.status === 'loading' ? 'Registering...' : 'Register Now'}
+                {state.status === 'loading' ? 'Creating Account...' : 'Create Account'}
               </Button>
             </form>
           </CardContent>
         </Card>
 
         <p className="text-center text-xs text-muted-foreground px-4">
-          Already registered?{' '}
+          Already have an account?{' '}
           <Link href="/login" className="text-primary font-medium underline underline-offset-2 hover:text-primary/80">
             Sign in here
           </Link>

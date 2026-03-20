@@ -16,6 +16,7 @@ import {
   sendRoundResultsEmail,
 } from '@/lib/notifications';
 import type {
+  User,
   Participant,
   Tournament,
   Round,
@@ -34,6 +35,156 @@ function shuffleArray<T>(arr: T[]): T[] {
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
+}
+
+// ---------------------------------------------------------------------------
+// 0a. createUser (account creation)
+// ---------------------------------------------------------------------------
+
+export async function createUser(formData: FormData): Promise<{
+  success: boolean;
+  error?: string;
+  user?: User;
+}> {
+  const name = (formData.get('name') as string | null)?.trim();
+  const email = (formData.get('email') as string | null)?.trim().toLowerCase();
+  const phone = (formData.get('phone') as string | null)?.trim();
+
+  if (!name || !email || !phone) {
+    return { success: false, error: 'Name, email, and phone are required.' };
+  }
+
+  const supabase = getAdminClient();
+
+  // Check if user already exists — return them if so
+  const { data: existing } = await supabase
+    .from('users')
+    .select('id, name, email, phone, created_at')
+    .eq('email', email)
+    .single();
+
+  if (existing) {
+    return { success: true, user: existing };
+  }
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .insert({ name, email, phone })
+    .select('id, name, email, phone, created_at')
+    .single();
+
+  if (error) {
+    console.error('[createUser]', error);
+    return { success: false, error: 'Failed to create account. Please try again.' };
+  }
+
+  return { success: true, user };
+}
+
+// ---------------------------------------------------------------------------
+// 0b. getUserByEmail (login)
+// ---------------------------------------------------------------------------
+
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const supabase = getAdminClient();
+
+  const { data } = await supabase
+    .from('users')
+    .select('id, name, email, phone, created_at')
+    .eq('email', email.toLowerCase().trim())
+    .single();
+
+  return data ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// 0c. getParticipantByUserId (find tournament participant for a user)
+// ---------------------------------------------------------------------------
+
+export async function getParticipantByUserId(userId: string): Promise<Participant | null> {
+  const supabase = getAdminClient();
+
+  const { data } = await supabase
+    .from('participants')
+    .select('id, name, email, phone, seed, eliminated, user_id, created_at')
+    .eq('user_id', userId)
+    .single();
+
+  return data ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// 0d. registerForTournament (create participant linked to user)
+// ---------------------------------------------------------------------------
+
+export async function registerForTournament(userId: string): Promise<{
+  success: boolean;
+  error?: string;
+  participant?: Participant;
+}> {
+  const supabase = getAdminClient();
+
+  // Get user info
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, name, email, phone')
+    .eq('id', userId)
+    .single();
+
+  if (!user) {
+    return { success: false, error: 'User not found.' };
+  }
+
+  // Check active tournament
+  const { data: tournament } = await supabase
+    .from('tournaments')
+    .select('id, name, status, current_round, registration_deadline, created_at')
+    .in('status', ['registration', 'active'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!tournament) {
+    return { success: false, error: 'No active tournament is currently accepting registrations.' };
+  }
+
+  if (tournament.status !== 'registration') {
+    return { success: false, error: 'Registration is closed for this tournament.' };
+  }
+
+  const deadline = new Date(tournament.registration_deadline);
+  if (new Date() > deadline) {
+    return { success: false, error: 'The registration deadline has passed.' };
+  }
+
+  // Check if already registered (by user_id or email)
+  const { data: existing } = await supabase
+    .from('participants')
+    .select('id, name, email, phone, seed, eliminated, user_id, created_at')
+    .or(`user_id.eq.${userId},email.eq.${user.email}`)
+    .single();
+
+  if (existing) {
+    // Link if not already linked
+    if (!existing.user_id) {
+      await supabase.from('participants').update({ user_id: userId }).eq('id', existing.id);
+    }
+    return { success: true, participant: { ...existing, user_id: userId } };
+  }
+
+  const { data: participant, error } = await supabase
+    .from('participants')
+    .insert({ name: user.name, email: user.email, phone: user.phone, user_id: userId })
+    .select('id, name, email, phone, seed, eliminated, user_id, created_at')
+    .single();
+
+  if (error) {
+    console.error('[registerForTournament]', error);
+    return { success: false, error: 'Failed to register. Please try again.' };
+  }
+
+  revalidatePath('/');
+  return { success: true, participant };
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +231,7 @@ export async function registerParticipant(formData: FormData): Promise<{
   // Check for duplicate email — if already registered, return the existing participant
   const { data: existing } = await supabase
     .from('participants')
-    .select('id, name, email, phone, seed, eliminated, created_at')
+    .select('id, name, email, phone, seed, eliminated, user_id, created_at')
     .eq('email', email)
     .single();
 
@@ -91,7 +242,7 @@ export async function registerParticipant(formData: FormData): Promise<{
   const { data: participant, error } = await supabase
     .from('participants')
     .insert({ name, email, phone })
-    .select('id, name, email, phone, seed, eliminated, created_at')
+    .select('id, name, email, phone, seed, eliminated, user_id, created_at')
     .single();
 
   if (error) {
@@ -698,7 +849,7 @@ export async function getParticipantByEmail(email: string): Promise<Participant 
 
   const { data } = await supabase
     .from('participants')
-    .select('id, name, email, phone, seed, eliminated, created_at')
+    .select('id, name, email, phone, seed, eliminated, user_id, created_at')
     .eq('email', email.toLowerCase().trim())
     .single();
 
@@ -737,7 +888,7 @@ export async function getParticipantMatchup(
 
   const { data: participants } = await supabase
     .from('participants')
-    .select('id, name, email, phone, seed, eliminated, created_at')
+    .select('id, name, email, phone, seed, eliminated, user_id, created_at')
     .in('id', participantIds);
 
   const pMap = new Map((participants ?? []).map((p) => [p.id, p]));
@@ -866,7 +1017,7 @@ export async function getAllParticipants(): Promise<Participant[]> {
 
   const { data } = await supabase
     .from('participants')
-    .select('id, name, email, phone, seed, eliminated, created_at')
+    .select('id, name, email, phone, seed, eliminated, user_id, created_at')
     .order('name', { ascending: true });
 
   return data ?? [];
@@ -886,7 +1037,7 @@ export async function updateParticipant(
     .from('participants')
     .update(data)
     .eq('id', id)
-    .select('id, name, email, phone, seed, eliminated, created_at')
+    .select('id, name, email, phone, seed, eliminated, user_id, created_at')
     .single();
 
   if (error) {

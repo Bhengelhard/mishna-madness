@@ -8,7 +8,8 @@ import {
   getParticipantMatchup,
   getParticipantSubmissions,
   getRounds,
-  getTournamentBracket,
+  getParticipantByUserId,
+  registerForTournament,
 } from '@/lib/actions';
 import { getRoundName } from '@/lib/bracket';
 import {
@@ -28,7 +29,7 @@ import type { Tournament, Round, Matchup, Participant, ScoreSubmission } from '@
 // Types
 // ---------------------------------------------------------------------------
 
-interface ParticipantInfo {
+interface UserInfo {
   id: string;
   name: string;
 }
@@ -294,7 +295,8 @@ function DashboardSkeleton() {
 export default function DashboardPage() {
   const router = useRouter();
 
-  const [participant, setParticipant] = useState<ParticipantInfo | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [participant, setParticipant] = useState<Participant | null>(null);
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [currentMatchupData, setCurrentMatchupData] = useState<{
@@ -308,21 +310,26 @@ export default function DashboardPage() {
   const [pastRoundsData, setPastRoundsData] = useState<RoundMatchupData[]>([]);
   const [isEliminated, setIsEliminated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedId = localStorage.getItem('participant_id');
-    const storedName = localStorage.getItem('participant_name');
+    const storedUserId = localStorage.getItem('userId');
+    const storedUserName = localStorage.getItem('userName');
 
-    if (!storedId || !storedName) {
+    if (!storedUserId || !storedUserName) {
       router.replace('/login');
       return;
     }
 
-    setParticipant({ id: storedId, name: storedName });
+    setUserInfo({ id: storedUserId, name: storedUserName });
 
     const load = async () => {
       try {
+        // Look up participant linked to this user
+        const p = await getParticipantByUserId(storedUserId);
+        setParticipant(p);
+
         const t = await getActiveTournament();
         if (!t) {
           setLoading(false);
@@ -330,27 +337,30 @@ export default function DashboardPage() {
         }
         setTournament(t);
 
+        // If no participant record, user hasn't registered for tournament yet
+        if (!p) {
+          setLoading(false);
+          return;
+        }
+
         const allRounds = await getRounds(t.id);
         setRounds(allRounds);
 
-        const totalRounds = allRounds.length;
         const currentRoundNumber = t.current_round;
         const currentRound = allRounds.find((r) => r.round_number === currentRoundNumber);
 
         // Fetch matchup for current round
         if (currentRound) {
-          const matchupResult = await getParticipantMatchup(storedId, currentRound.id);
+          const matchupResult = await getParticipantMatchup(p.id, currentRound.id);
           if (matchupResult) {
             setCurrentMatchupData(matchupResult);
-            // Determine if participant is in this matchup; if not, they may be eliminated
             const inMatchup =
-              matchupResult.matchup.participant_1_id === storedId ||
-              matchupResult.matchup.participant_2_id === storedId;
+              matchupResult.matchup.participant_1_id === p.id ||
+              matchupResult.matchup.participant_2_id === p.id;
             if (!inMatchup) {
               setIsEliminated(true);
             }
           } else {
-            // No matchup found in current round = eliminated
             setIsEliminated(true);
           }
         }
@@ -360,24 +370,24 @@ export default function DashboardPage() {
         const pastData: RoundMatchupData[] = [];
 
         for (const r of pastRounds) {
-          const result = await getParticipantMatchup(storedId, r.id);
+          const result = await getParticipantMatchup(p.id, r.id);
           if (!result) continue;
 
           const { matchup, submissions } = result;
-          const isP1 = matchup.participant_1_id === storedId;
+          const isP1 = matchup.participant_1_id === p.id;
           const myScore = isP1 ? matchup.p1_total_score : matchup.p2_total_score;
           const opponentScore = isP1 ? matchup.p2_total_score : matchup.p1_total_score;
 
           let isWinner: boolean | null = null;
-          if (matchup.winner_id === storedId) {
+          if (matchup.winner_id === p.id) {
             isWinner = true;
-          } else if (matchup.winner_id && matchup.winner_id !== storedId) {
+          } else if (matchup.winner_id && matchup.winner_id !== p.id) {
             isWinner = false;
           } else if (!matchup.participant_2_id || !matchup.participant_1_id) {
-            isWinner = null; // bye
+            isWinner = null;
           }
 
-          const mySubmissions = await getParticipantSubmissions(matchup.id, storedId);
+          const mySubmissions = await getParticipantSubmissions(matchup.id, p.id);
 
           pastData.push({
             round: r,
@@ -401,11 +411,29 @@ export default function DashboardPage() {
     load();
   }, [router]);
 
+  async function handleRegisterForTournament() {
+    if (!userInfo) return;
+    setRegistering(true);
+    setError(null);
+    try {
+      const result = await registerForTournament(userInfo.id);
+      if (result.success && result.participant) {
+        setParticipant(result.participant);
+      } else {
+        setError(result.error ?? 'Failed to register for tournament.');
+      }
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setRegistering(false);
+    }
+  }
+
   if (loading) {
     return <DashboardSkeleton />;
   }
 
-  if (error) {
+  if (error && !userInfo) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
         <div className="text-center space-y-3">
@@ -419,13 +447,91 @@ export default function DashboardPage() {
     );
   }
 
-  if (!participant) return null;
+  if (!userInfo) return null;
 
+  // User is logged in but not registered for tournament
+  if (!participant) {
+    const canRegister = tournament?.status === 'registration';
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="w-full max-w-2xl mx-auto px-4 py-6 space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground leading-tight">
+              Welcome, {userInfo.name}!
+            </h1>
+          </div>
+
+          {error && (
+            <div className="rounded-md bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          {tournament && canRegister ? (
+            <Card className="border-primary/30 shadow-md">
+              <CardHeader>
+                <CardTitle className="text-lg">{tournament.name}</CardTitle>
+                <CardDescription>
+                  Registration is open! Join the tournament to compete.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Registration deadline:{' '}
+                  <span className="font-medium text-foreground">
+                    {new Date(tournament.registration_deadline).toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </p>
+                <Button
+                  onClick={handleRegisterForTournament}
+                  disabled={registering}
+                  size="lg"
+                  className="w-full min-h-[56px] text-base font-semibold"
+                >
+                  {registering ? 'Registering...' : 'Register for Tournament'}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : tournament ? (
+            <Card className="border-border">
+              <CardContent className="py-8 text-center space-y-2">
+                <p className="font-semibold text-foreground">{tournament.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  Registration is closed. The tournament is already underway.
+                </p>
+                <Button render={<Link href="/bracket" />} variant="outline" size="lg" className="min-h-[48px] mt-2">
+                  View Bracket
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-border">
+              <CardContent className="py-8 text-center space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  No active tournament right now. Check back soon.
+                </p>
+                <Button render={<Link href="/" />} variant="outline" className="min-h-[48px] mt-2">
+                  Back to Home
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // User is registered — show tournament dashboard
   if (!tournament) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
         <div className="text-center space-y-4">
-          <p className="text-2xl font-bold">Welcome, {participant.name}!</p>
+          <p className="text-2xl font-bold">Welcome, {userInfo.name}!</p>
           <p className="text-muted-foreground text-sm">
             No active tournament right now. Check back soon.
           </p>
@@ -492,7 +598,7 @@ export default function DashboardPage() {
         {/* Welcome header */}
         <div>
           <h1 className="text-2xl font-bold text-foreground leading-tight">
-            Welcome back, {participant.name}!
+            Welcome back, {userInfo.name}!
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             {tournament.name}
@@ -550,7 +656,7 @@ export default function DashboardPage() {
                 <ScoreBar
                   myScore={currentPoints}
                   opponentScore={currentOpponentScore}
-                  myName={participant.name}
+                  myName={userInfo.name}
                   opponentName={currentMatchupData.matchup.opponent.name}
                 />
               ) : (

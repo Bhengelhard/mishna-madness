@@ -8,6 +8,7 @@ import {
   getActiveTournament,
   deleteSubmission,
   getRounds,
+  getParticipantByUserId,
 } from '@/lib/actions';
 import { MASECHTOS, getMasechta, getSederForMasechta } from '@/lib/mishnah-data';
 import { calculateScore } from '@/lib/scoring';
@@ -124,17 +125,25 @@ export default function SubmitPage() {
   }, []);
 
   useEffect(() => {
-    const id = localStorage.getItem('participantId');
-    const name = localStorage.getItem('participantName');
+    const userId = localStorage.getItem('userId');
+    const userName = localStorage.getItem('userName');
 
-    if (!id || !name) {
+    if (!userId || !userName) {
       router.replace('/login');
       return;
     }
 
-    setParticipantId(id);
-    setParticipantName(name);
-    loadData(id);
+    // Look up participant by user ID
+    (async () => {
+      const p = await getParticipantByUserId(userId);
+      if (!p) {
+        router.replace('/dashboard');
+        return;
+      }
+      setParticipantId(p.id);
+      setParticipantName(p.name);
+      loadData(p.id);
+    })();
   }, [router, loadData]);
 
   // Masechta selection effects

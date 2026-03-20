@@ -9,6 +9,30 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      users: {
+        Row: {
+          id: string
+          name: string
+          email: string
+          phone: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          email: string
+          phone: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          email?: string
+          phone?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       participants: {
         Row: {
           id: string
@@ -17,6 +41,7 @@ export type Database = {
           phone: string
           seed: number | null
           eliminated: boolean
+          user_id: string | null
           created_at: string
         }
         Insert: {
@@ -26,6 +51,7 @@ export type Database = {
           phone: string
           seed?: number | null
           eliminated?: boolean
+          user_id?: string | null
           created_at?: string
         }
         Update: {
@@ -35,6 +61,7 @@ export type Database = {
           phone?: string
           seed?: number | null
           eliminated?: boolean
+          user_id?: string | null
           created_at?: string
         }
         Relationships: []
@@ -216,6 +243,7 @@ export type Database = {
 }
 
 // Convenience type aliases
+export type User = Database['public']['Tables']['users']['Row']
 export type Participant = Database['public']['Tables']['participants']['Row']
 export type Tournament = Database['public']['Tables']['tournaments']['Row']
 export type Round = Database['public']['Tables']['rounds']['Row']
@@ -224,6 +252,7 @@ export type ScoreSubmission = Database['public']['Tables']['score_submissions'][
 export type NotificationLog = Database['public']['Tables']['notifications_log']['Row']
 
 // Insert type aliases
+export type UserInsert = Database['public']['Tables']['users']['Insert']
 export type ParticipantInsert = Database['public']['Tables']['participants']['Insert']
 export type TournamentInsert = Database['public']['Tables']['tournaments']['Insert']
 export type RoundInsert = Database['public']['Tables']['rounds']['Insert']
@@ -232,6 +261,7 @@ export type ScoreSubmissionInsert = Database['public']['Tables']['score_submissi
 export type NotificationLogInsert = Database['public']['Tables']['notifications_log']['Insert']
 
 // Update type aliases
+export type UserUpdate = Database['public']['Tables']['users']['Update']
 export type ParticipantUpdate = Database['public']['Tables']['participants']['Update']
 export type TournamentUpdate = Database['public']['Tables']['tournaments']['Update']
 export type RoundUpdate = Database['public']['Tables']['rounds']['Update']
