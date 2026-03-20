@@ -119,7 +119,7 @@ export async function createTournament(data: {
       name: data.name,
       registration_deadline: data.registrationDeadline,
       status: 'registration',
-      current_round: 0,
+      current_round: 1,
     })
     .select('id, name, status, current_round, registration_deadline, created_at')
     .single();
